@@ -1,68 +1,134 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import AudioRecorder from './components/AudioRecorder';
 import ChatInterface from './components/ChatInterface';
-import Sidebar from './components/Sidebar';
-import { Menu } from 'lucide-react';
-import websocketService, { ConnectionState } from './services/websocket';
+import './App.css';
+
+interface Message {
+  id: string;
+  type: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+}
 
 function App() {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [isConnected, setIsConnected] = useState(false);
-  
-  // Track WebSocket connection
+  const [isRecording, setIsRecording] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
+
   useEffect(() => {
-    const handleConnectionChange = () => {
-      const state = websocketService.getConnectionState();
-      setIsConnected(state === ConnectionState.CONNECTED);
+    // Initialize WebSocket connection
+    const connectWebSocket = () => {
+      const wsUrl = `ws://${window.location.hostname}:8000/ws`;
+      wsRef.current = new WebSocket(wsUrl);
+
+      wsRef.current.onopen = () => {
+        console.log('WebSocket connected');
+        setIsConnected(true);
+      };
+
+      wsRef.current.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        handleWebSocketMessage(message);
+      };
+
+      wsRef.current.onclose = () => {
+        console.log('WebSocket disconnected');
+        setIsConnected(false);
+        // Attempt to reconnect after 3 seconds
+        setTimeout(connectWebSocket, 3000);
+      };
+
+      wsRef.current.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
     };
-    
-    // Set up event listeners
-    websocketService.addEventListener('open', handleConnectionChange);
-    websocketService.addEventListener('close', handleConnectionChange);
-    websocketService.addEventListener('error', handleConnectionChange);
-    
-    // Initial check
-    handleConnectionChange();
-    
-    // Cleanup
+
+    connectWebSocket();
+
     return () => {
-      websocketService.removeEventListener('open', handleConnectionChange);
-      websocketService.removeEventListener('close', handleConnectionChange);
-      websocketService.removeEventListener('error', handleConnectionChange);
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
     };
   }, []);
 
+  const handleWebSocketMessage = (message: any) => {
+    switch (message.type) {
+      case 'transcript':
+        addMessage('user', message.data);
+        break;
+      case 'response':
+        addMessage('assistant', message.data);
+        break;
+      case 'audio_response':
+        // Handle audio playback
+        playAudioResponse(message.data);
+        break;
+    }
+  };
+
+  const addMessage = (type: 'user' | 'assistant', content: string) => {
+    const newMessage: Message = {
+      id: Date.now().toString(),
+      type,
+      content,
+      timestamp: new Date(),
+    };
+    setMessages(prev => [...prev, newMessage]);
+  };
+
+  const playAudioResponse = (audioData: string) => {
+    // Convert base64 audio to blob and play
+    const audioBlob = new Blob([Uint8Array.from(atob(audioData), c => c.charCodeAt(0))], {
+      type: 'audio/wav'
+    });
+    const audioUrl = URL.createObjectURL(audioBlob);
+    const audio = new Audio(audioUrl);
+    audio.play();
+  };
+
+  const sendTextMessage = (text: string) => {
+    if (wsRef.current && isConnected) {
+      wsRef.current.send(JSON.stringify({
+        type: 'text',
+        data: text
+      }));
+      addMessage('user', text);
+    }
+  };
+
+  const sendAudioData = (audioData: string) => {
+    if (wsRef.current && isConnected) {
+      wsRef.current.send(JSON.stringify({
+        type: 'audio',
+        data: audioData
+      }));
+    }
+  };
+
   return (
-    <div className="flex relative">
-      {/* Toggle Button */}
-      <button
-        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-        className="fixed top-4 left-4 z-50 p-2 rounded-lg bg-slate-800/30 hover:bg-slate-700/30 
-                   text-slate-400 hover:text-slate-300 transition-all duration-300"
-      >
-        <Menu className="w-5 h-5" />
-      </button>
-      
-      {/* Sidebar */}
-      <div className={`
-        fixed top-0 left-0 h-screen z-40
-        transition-all duration-300 ease-in-out
-        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-      `}>
-      <Sidebar 
-        onClose={() => setIsSidebarOpen(false)} 
-        isConnected={isConnected}
-        onReconnect={() => websocketService.connect()}
-        onClearHistory={() => websocketService.clearHistory()}
-      />
-      </div>
-      
-      {/* Main Content */}
-      <div className={`
-        flex-1 transition-all duration-300 ease-in-out
-        ${isSidebarOpen ? 'ml-64' : 'ml-0'}
-      `}>
-        <ChatInterface />
-      </div>
+    <div className="App">
+      <header className="app-header">
+        <h1>Vocalis Conversational AI</h1>
+        <div className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
+          {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
+        </div>
+      </header>
+
+      <main className="app-main">
+        <ChatInterface 
+          messages={messages} 
+          onSendMessage={sendTextMessage}
+        />
+        
+        <AudioRecorder 
+          onAudioData={sendAudioData}
+          isRecording={isRecording}
+          setIsRecording={setIsRecording}
+          isConnected={isConnected}
+        />
+      </main>
     </div>
   );
 }
