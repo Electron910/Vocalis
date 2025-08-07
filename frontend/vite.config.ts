@@ -1,24 +1,25 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
   server: {
+    host: '0.0.0.0',
     port: 3000,
-    open: true, // Automatically open browser
     proxy: {
-      // Proxy WebSocket connections to backend
       '/ws': {
         target: 'ws://localhost:8000',
         ws: true,
+        changeOrigin: true,
       },
-      // Proxy REST API calls to backend
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
     },
+  },
+  define: {
+    'import.meta.env.VITE_VISION_ENABLED': false,
   },
 })
