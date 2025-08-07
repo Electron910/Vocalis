@@ -17,6 +17,7 @@ from . import config
 from .services.transcription import WhisperTranscriber
 from .services.llm import LLMClient
 from .services.tts import TTSClient
+from .services.vision import vision_service
 
 # Import routes
 from .routes.websocket import websocket_endpoint
@@ -32,6 +33,7 @@ logger = logging.getLogger(__name__)
 transcription_service = None
 llm_service = None
 tts_service = None
+# Vision service is a singleton already initialized in its module
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -65,12 +67,20 @@ async def lifespan(app: FastAPI):
         output_format=cfg["tts_format"]
     )
     
+    # Initialize vision service (will download model if not cached)
+    logger.info("Initializing vision service...")
+    vision_service.initialize()
+    
     logger.info("All services initialized successfully")
     
     yield
     
     # Cleanup on shutdown
     logger.info("Shutting down services...")
+    
+    # No specific cleanup needed for these services,
+    # but we could add resource release code here if needed (maybe in a future release lex 31/03/25)
+    
     logger.info("Shutdown complete")
 
 # Create FastAPI application
@@ -115,19 +125,19 @@ async def health_check():
             "transcription": transcription_service is not None,
             "llm": llm_service is not None,
             "tts": tts_service is not None,
+            "vision": vision_service.is_ready()
         },
         "config": {
             "whisper_model": config.WHISPER_MODEL,
             "tts_voice": config.TTS_VOICE,
-            "websocket_port": config.WEBSOCKET_PORT,
-            "vision_enabled": False
+            "websocket_port": config.WEBSOCKET_PORT
         }
     }
 
 @app.get("/config")
 async def get_full_config():
     """Get full configuration."""
-    if not all([transcription_service, llm_service, tts_service]):
+    if not all([transcription_service, llm_service, tts_service]) or not vision_service.is_ready():
         raise HTTPException(status_code=503, detail="Services not initialized")
     
     return {
