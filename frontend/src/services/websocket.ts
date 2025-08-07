@@ -120,7 +120,7 @@ export class WebSocketService {
   private isInGreetingFlow: boolean = false;
 
   constructor(
-    url: string = 'ws://localhost:8000/ws', 
+    url: string = 'ws://${window.location.hostname}:8000/ws', 
     autoReconnect: boolean = true,
     reconnectInterval: number = 3000,
     maxReconnectAttempts: number = 5
