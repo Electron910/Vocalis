@@ -23,8 +23,8 @@ VAD_THRESHOLD = float(os.getenv("VAD_THRESHOLD", 0.5))
 VAD_BUFFER_SIZE = int(os.getenv("VAD_BUFFER_SIZE", 30))
 AUDIO_SAMPLE_RATE = int(os.getenv("AUDIO_SAMPLE_RATE", 48000))
 
-# Disable Vision Features
-VISION_ENABLED = os.getenv("VISION_ENABLED", "false").lower() == "true"
+# Completely disable vision features
+VISION_ENABLED = False
 
 def get_config() -> Dict[str, Any]:
     return {
