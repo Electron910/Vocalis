@@ -11,10 +11,12 @@ export default defineConfig({
         target: 'ws://localhost:8000',
         ws: true,
         changeOrigin: true,
+        secure: false,
       },
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
+        secure: false,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
     },
