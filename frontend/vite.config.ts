@@ -8,13 +8,13 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/ws': {
-        target: 'ws://localhost:8000',
+        target: `ws://${process.env.HOST || 'localhost'}:8000`,
         ws: true,
         changeOrigin: true,
         secure: false,
       },
       '/api': {
-        target: 'http://localhost:8000',
+        target: `http://${process.env.HOST || 'localhost'}:8000`,
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path.replace(/^\/api/, ''),
