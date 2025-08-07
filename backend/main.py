@@ -1,73 +1,158 @@
-import asyncio
-import json
+"""
+Vocalis Backend Server
+
+FastAPI application entry point.
+"""
+
 import logging
-from fastapi import FastAPI, WebSocket
+import uvicorn
+from fastapi import FastAPI, WebSocket, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 
-from backend.routes.websocket import websocket_endpoint
-from backend.services.transcription import WhisperTranscriber
-from backend.services.llm import LLMClient
-from backend.services.tts import TTSClient
-from backend.config import get_config
+# Import configuration
+from . import config
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
+# Import services
+from .services.transcription import WhisperTranscriber
+from .services.llm import LLMClient
+from .services.tts import TTSClient
+
+# Import routes
+from .routes.websocket import websocket_endpoint
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
 logger = logging.getLogger(__name__)
 
-# Get configuration
-config = get_config()
+# Global service instances
+transcription_service = None
+llm_service = None
+tts_service = None
 
-# Initialize services
-transcriber = WhisperTranscriber(
-    model_size=config["whisper_model"],
-    device="cuda" if "cuda" in str(config.get("device", "cpu")) else "cpu"
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Startup and shutdown events for the FastAPI application.
+    """
+    # Load configuration
+    cfg = config.get_config()
+    
+    # Initialize services on startup
+    logger.info("Initializing services...")
+    
+    global transcription_service, llm_service, tts_service
+    
+    # Initialize transcription service
+    transcription_service = WhisperTranscriber(
+        model_size=cfg["whisper_model"],
+        sample_rate=cfg["audio_sample_rate"]
+    )
+    
+    # Initialize LLM service
+    llm_service = LLMClient(
+        api_endpoint=cfg["llm_api_endpoint"]
+    )
+    
+    # Initialize TTS service
+    tts_service = TTSClient(
+        api_endpoint=cfg["tts_api_endpoint"],
+        model=cfg["tts_model"],
+        voice=cfg["tts_voice"],
+        output_format=cfg["tts_format"]
+    )
+    
+    logger.info("All services initialized successfully")
+    
+    yield
+    
+    # Cleanup on shutdown
+    logger.info("Shutting down services...")
+    logger.info("Shutdown complete")
+
+# Create FastAPI application
+app = FastAPI(
+    title="Vocalis Backend",
+    description="Speech-to-Speech AI Assistant Backend",
+    version="0.1.0",
+    lifespan=lifespan
 )
-llm_client = LLMClient(config["llm_api_endpoint"])
-tts_client = TTSClient(config["tts_api_endpoint"])
 
-app = FastAPI(title="Vocalis Conversational AI", version="1.0.0")
-
-# CORS middleware
+# Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Allow all origins for development
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.websocket("/ws")
-async def websocket_route(websocket: WebSocket):
-    """WebSocket endpoint for real-time communication"""
-    await websocket_endpoint(websocket, transcriber, llm_client, tts_client)
+# Service dependency functions
+def get_transcription_service():
+    return transcription_service
+
+def get_llm_service():
+    return llm_service
+
+def get_tts_service():
+    return tts_service
+
+# API routes
+@app.get("/")
+async def root():
+    """Root endpoint for health check."""
+    return {"status": "ok", "message": "Vocalis backend is running"}
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
+    """Health check endpoint."""
     return {
-        "status": "healthy", 
-        "message": "Vocalis Conversational AI is running",
+        "status": "ok",
+        "services": {
+            "transcription": transcription_service is not None,
+            "llm": llm_service is not None,
+            "tts": tts_service is not None,
+        },
         "config": {
-            "vision_enabled": config.get("vision_enabled", False),
-            "whisper_model": config.get("whisper_model", "base.en")
+            "whisper_model": config.WHISPER_MODEL,
+            "tts_voice": config.TTS_VOICE,
+            "websocket_port": config.WEBSOCKET_PORT,
+            "vision_enabled": False
         }
     }
 
 @app.get("/config")
-async def get_app_config():
-    """Get application configuration"""
+async def get_full_config():
+    """Get full configuration."""
+    if not all([transcription_service, llm_service, tts_service]):
+        raise HTTPException(status_code=503, detail="Services not initialized")
+    
     return {
-        "vision_enabled": config.get("vision_enabled", False),
-        "tts_enabled": True,
-        "stt_enabled": True,
-        "websocket_port": config["websocket_port"]
+        "transcription": transcription_service.get_config(),
+        "llm": llm_service.get_config(),
+        "tts": tts_service.get_config(),
+        "system": config.get_config()
     }
 
+# WebSocket route
+@app.websocket("/ws")
+async def websocket_route(websocket: WebSocket):
+    """WebSocket endpoint for bidirectional audio streaming."""
+    await websocket_endpoint(
+        websocket, 
+        transcription_service, 
+        llm_service, 
+        tts_service
+    )
+
+# Run server directly if executed as script
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(
-        app,
-        host=config["websocket_host"],
-        port=config["websocket_port"],
-        reload=False
+        "backend.main:app",
+        host=config.WEBSOCKET_HOST,
+        port=config.WEBSOCKET_PORT,
+        reload=True
     )
