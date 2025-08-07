@@ -1,56 +1,68 @@
-import React, { useState } from 'react';
-import { Menu } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
 import ChatInterface from './components/ChatInterface';
 import Sidebar from './components/Sidebar';
-import websocketService from './services/websocket';
+import { Menu } from 'lucide-react';
+import websocketService, { ConnectionState } from './services/websocket';
 
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
-  const handleReconnect = () => {
-    websocketService.disconnect();
-    setTimeout(() => {
-      websocketService.connect();
-    }, 1000);
-  };
-
-  const handleClearHistory = () => {
-    websocketService.clearHistory();
-  };
+  const [isConnected, setIsConnected] = useState(false);
+  
+  // Track WebSocket connection
+  useEffect(() => {
+    const handleConnectionChange = () => {
+      const state = websocketService.getConnectionState();
+      setIsConnected(state === ConnectionState.CONNECTED);
+    };
+    
+    // Set up event listeners
+    websocketService.addEventListener('open', handleConnectionChange);
+    websocketService.addEventListener('close', handleConnectionChange);
+    websocketService.addEventListener('error', handleConnectionChange);
+    
+    // Initial check
+    handleConnectionChange();
+    
+    // Cleanup
+    return () => {
+      websocketService.removeEventListener('open', handleConnectionChange);
+      websocketService.removeEventListener('close', handleConnectionChange);
+      websocketService.removeEventListener('error', handleConnectionChange);
+    };
+  }, []);
 
   return (
-    <div className="relative h-screen overflow-hidden">
-      {/* Menu Button */}
+    <div className="flex relative">
+      {/* Toggle Button */}
       <button
-        onClick={() => setIsSidebarOpen(true)}
-        className="fixed top-4 left-4 z-40 p-2 rounded-lg bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 hover:bg-slate-800/60 transition-colors"
+        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+        className="fixed top-4 left-4 z-50 p-2 rounded-lg bg-slate-800/30 hover:bg-slate-700/30 
+                   text-slate-400 hover:text-slate-300 transition-all duration-300"
       >
-        <Menu className="w-5 h-5 text-slate-300" />
+        <Menu className="w-5 h-5" />
       </button>
-
-      {/* Main Chat Interface */}
-      <ChatInterface />
-
+      
       {/* Sidebar */}
-      {isSidebarOpen && (
-        <>
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-30"
-            onClick={() => setIsSidebarOpen(false)}
-          />
-          
-          {/* Sidebar */}
-          <div className="fixed left-0 top-0 z-50 h-full">
-            <Sidebar
-              onClose={() => setIsSidebarOpen(false)}
-              isConnected={websocketService.getConnectionState() === 'connected'}
-              onReconnect={handleReconnect}
-              onClearHistory={handleClearHistory}
-            />
-          </div>
-        </>
-      )}
+      <div className={`
+        fixed top-0 left-0 h-screen z-40
+        transition-all duration-300 ease-in-out
+        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+      `}>
+      <Sidebar 
+        onClose={() => setIsSidebarOpen(false)} 
+        isConnected={isConnected}
+        onReconnect={() => websocketService.connect()}
+        onClearHistory={() => websocketService.clearHistory()}
+      />
+      </div>
+      
+      {/* Main Content */}
+      <div className={`
+        flex-1 transition-all duration-300 ease-in-out
+        ${isSidebarOpen ? 'ml-64' : 'ml-0'}
+      `}>
+        <ChatInterface />
+      </div>
     </div>
   );
 }
