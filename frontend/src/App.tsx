@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Menu, X } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import ChatInterface from './components/ChatInterface';
 import Sidebar from './components/Sidebar';
 import websocketService from './services/websocket';
