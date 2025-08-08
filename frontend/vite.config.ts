@@ -5,17 +5,19 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
+    host: '0.0.0.0', // Bind to all interfaces for RunPod
     port: 3000,
-    open: true, // Automatically open browser
+    open: false, // Don't auto-open browser in RunPod
     proxy: {
       // Proxy WebSocket connections to backend
       '/ws': {
-        target: 'ws://localhost:8000',
+        target: 'ws://0.0.0.0:8000',
         ws: true,
+        changeOrigin: true,
       },
       // Proxy REST API calls to backend
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://0.0.0.0:8000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
