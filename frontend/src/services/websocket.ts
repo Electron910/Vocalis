@@ -120,9 +120,7 @@ export class WebSocketService {
   private isInGreetingFlow: boolean = false;
 
   constructor(
-    url: string = process.env.NODE_ENV === 'development'
-      ? 'ws://localhost:8000/ws'
-      : `ws://${window.location.hostname.replace('-3000', '-8000')}/ws`,
+    url: string = 'ws://localhost:8000/ws', 
     autoReconnect: boolean = true,
     reconnectInterval: number = 3000,
     maxReconnectAttempts: number = 5
