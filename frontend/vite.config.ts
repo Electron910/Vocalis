@@ -14,11 +14,13 @@ export default defineConfig({
         target: 'ws://0.0.0.0:8000',
         ws: true,
         changeOrigin: true,
+        secure: false, // Allow self-signed certificates in RunPod
       },
       // Proxy REST API calls to backend
       '/api': {
         target: 'http://0.0.0.0:8000',
         changeOrigin: true,
+        secure: false, // Allow self-signed certificates in RunPod
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
     },
