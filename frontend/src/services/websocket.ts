@@ -120,12 +120,21 @@ export class WebSocketService {
   private isInGreetingFlow: boolean = false;
 
   constructor(
-    url: string = 'ws://localhost:8000/ws', 
+    url: string = '', 
     autoReconnect: boolean = true,
     reconnectInterval: number = 3000,
     maxReconnectAttempts: number = 5
   ) {
-    this.url = url;
+    // Auto-detect WebSocket URL for RunPod deployment
+    if (!url) {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.hostname;
+      const port = '8000'; // Backend WebSocket port
+      this.url = `${protocol}//${host}:${port}/ws`;
+    } else {
+      this.url = url;
+    }
+    
     this.autoReconnect = autoReconnect;
     this.reconnectInterval = reconnectInterval;
     this.reconnectAttempts = 0;
