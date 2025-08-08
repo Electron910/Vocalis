@@ -127,10 +127,26 @@ export class WebSocketService {
   ) {
     // Auto-detect WebSocket URL for RunPod deployment
     if (!url) {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.hostname;
-      const port = '8000'; // Backend WebSocket port
-      this.url = `${protocol}//${host}:${port}/ws`;
+      const currentUrl = window.location.href;
+      
+      // Check if we're on RunPod (proxy.runpod.net)
+      if (currentUrl.includes('proxy.runpod.net')) {
+        // Extract RunPod ID and construct WebSocket URL
+        const runpodMatch = currentUrl.match(/https:\/\/([^-]+)-3000\.proxy\.runpod\.net/);
+        if (runpodMatch) {
+          const runpodId = runpodMatch[1];
+          this.url = `wss://${runpodId}-8000.proxy.runpod.net/ws`;
+        } else {
+          // Fallback for RunPod
+          this.url = 'wss://localhost:8000/ws';
+        }
+      } else {
+        // Local development or other environments
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.hostname;
+        const port = '8000';
+        this.url = `${protocol}//${host}:${port}/ws`;
+      }
     } else {
       this.url = url;
     }
