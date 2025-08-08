@@ -8,13 +8,13 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/ws': {
-        target: `ws://${process.env.HOST || 'localhost'}:8000`,
+        target: `ws://${process.env.RUNPOD_POD_ID ? process.env.RUNPOD_POD_ID + '-8000.proxy.runpod.net' : 'localhost:8000'}`,
         ws: true,
         changeOrigin: true,
         secure: false,
       },
       '/api': {
-        target: `http://${process.env.HOST || 'localhost'}:8000`,
+        target: `http://${process.env.RUNPOD_POD_ID ? process.env.RUNPOD_POD_ID + '-8000.proxy.runpod.net' : 'localhost:8000'}`,
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path.replace(/^\/api/, ''),
