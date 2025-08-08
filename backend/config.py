@@ -12,9 +12,9 @@ from typing import Dict, Any
 # Load environment variables from .env file
 load_dotenv()
 
-# API Endpoints
-LLM_API_ENDPOINT = os.getenv("LLM_API_ENDPOINT", "http://127.0.0.1:1234/v1/chat/completions")
-TTS_API_ENDPOINT = os.getenv("TTS_API_ENDPOINT", "http://localhost:5005/v1/audio/speech")
+# API Endpoints - Use 0.0.0.0 for RunPod deployment
+LLM_API_ENDPOINT = os.getenv("LLM_API_ENDPOINT", "http://0.0.0.0:1234/v1/chat/completions")
+TTS_API_ENDPOINT = os.getenv("TTS_API_ENDPOINT", "http://0.0.0.0:5005/v1/audio/speech")
 
 # Whisper Model Configuration
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "tiny.en")
