@@ -27,7 +27,7 @@ class TTSClient:
     
     def __init__(
         self,
-        api_endpoint: str = "http://localhost:5005/v1/audio/speech",
+        api_endpoint: str = "http://localhost:5005/v1/audio/speech/stream",
         model: str = "tts-1",
         voice: str = "tara",
         output_format: str = "wav",
