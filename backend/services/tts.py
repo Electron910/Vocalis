@@ -27,7 +27,7 @@ class TTSClient:
     
     def __init__(
         self,
-        api_endpoint: str = "http://localhost:5005/v1/audio/speech/stream",
+        api_endpoint: str = "http://0.0.0.0:5005/v1/audio/speech/stream",
         model: str = "tts-1",
         voice: str = "tara",
         output_format: str = "wav",
@@ -204,6 +204,57 @@ class TTSClient:
             return audio_data
         except Exception as e:
             logger.error(f"Async TTS error: {e}")
+            raise
+        finally:
+            self.is_processing = False
+    
+    async def stream_text_to_speech_async(self, text: str):
+        """
+        Asynchronously stream audio chunks from the TTS API.
+        
+        Args:
+            text: Text to convert to speech
+            
+        Yields:
+            Audio chunks as they arrive from the streaming endpoint
+        """
+        self.is_processing = True
+        start_time = time.time()
+        
+        try:
+            # Prepare request payload
+            payload = {
+                "model": self.model,
+                "input": text,
+                "voice": self.voice,
+                "response_format": self.output_format,
+                "speed": self.speed
+            }
+            
+            logger.info(f"Sending async streaming TTS request with {len(text)} characters of text")
+            
+            # Use asyncio-compatible HTTP client for true async streaming
+            import aiohttp
+            
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
+                async with session.post(
+                    self.api_endpoint,
+                    json=payload,
+                    headers={"Content-Type": "application/json"}
+                ) as response:
+                    response.raise_for_status()
+                    
+                    # Stream chunks as they arrive
+                    async for chunk in response.content.iter_chunked(self.chunk_size):
+                        if chunk:
+                            yield chunk
+            
+            # Calculate processing time
+            self.last_processing_time = time.time() - start_time
+            logger.info(f"Completed async TTS streaming after {self.last_processing_time:.2f}s")
+            
+        except Exception as e:
+            logger.error(f"Async TTS streaming error: {e}")
             raise
         finally:
             self.is_processing = False
