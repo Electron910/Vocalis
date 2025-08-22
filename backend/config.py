@@ -14,7 +14,7 @@ load_dotenv()
 
 # API Endpoints - Use 0.0.0.0 for RunPod deployment
 LLM_API_ENDPOINT = os.getenv("LLM_API_ENDPOINT", "http://0.0.0.0:1234/v1/chat/completions")
-TTS_API_ENDPOINT = os.getenv("TTS_API_ENDPOINT", "http://0.0.0.0:5005/v1/audio/speech")
+TTS_API_ENDPOINT = os.getenv("TTS_API_ENDPOINT", "http://0.0.0.0:5005/v1/audio/speech/stream")
 
 # Whisper Model Configuration
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "tiny.en")
