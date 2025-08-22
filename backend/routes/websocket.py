@@ -357,22 +357,21 @@ class WebSocketManager:
             
             await self._send_status(websocket, "generating_speech", {})
             
-            # Get the complete audio file
-            audio_data = await self.tts_client.async_text_to_speech(text)
-            
-            # Check if playback should be interrupted
-            if self.interrupt_playback.is_set():
-                logger.info("TTS generation interrupted")
-                return
-            
-            # Encode and send the complete audio file
-            encoded_audio = base64.b64encode(audio_data).decode("utf-8")
-            await websocket.send_json({
-                "type": MessageType.TTS_CHUNK,
-                "audio_chunk": encoded_audio,
-                "format": self.tts_client.output_format,
-                "timestamp": datetime.now().isoformat()
-            })
+            # Stream audio chunks in real-time
+            async for audio_chunk in self.tts_client.stream_text_to_speech_async(text):
+                # Check if playback should be interrupted
+                if self.interrupt_playback.is_set():
+                    logger.info("TTS streaming interrupted")
+                    return
+                
+                # Encode and send each audio chunk immediately
+                encoded_audio = base64.b64encode(audio_chunk).decode("utf-8")
+                await websocket.send_json({
+                    "type": MessageType.TTS_CHUNK,
+                    "audio_chunk": encoded_audio,
+                    "format": self.tts_client.output_format,
+                    "timestamp": datetime.now().isoformat()
+                })
             
             # Signal TTS end
             if not self.interrupt_playback.is_set():
