@@ -69,6 +69,7 @@ export class AudioService {
   private isSpeaking: boolean = false; // Distinct from isPlaying to track TTS specifically
   private isMuted: boolean = false; // Track microphone mute state
   private currentSource: AudioBufferSourceNode | null = null;
+  private isInterrupted: boolean = false; // Flag to prevent continued playback after interrupt
   
   // State tracking (for UI coordination)
   private isProcessing: boolean = false;
@@ -540,6 +541,9 @@ export class AudioService {
     const buffer = this.audioQueue.shift();
     if (!buffer) return;
     
+    // Reset interrupt flag when starting new playback
+    this.isInterrupted = false;
+    
     // Set playback state - only dispatch PLAYBACK_START on the first buffer
     const wasPlaying = this.isPlaying;
     this.isPlaying = true;
@@ -554,6 +558,13 @@ export class AudioService {
     // Handle when this chunk ends
     source.onended = () => {
       console.log(`Chunk playback ended. Queue: ${this.audioQueue.length} remaining`);
+      
+      // Check if playback was interrupted - if so, don't continue
+      if (this.isInterrupted) {
+        console.log('Playback was interrupted, stopping continuation');
+        return;
+      }
+      
       // Immediately play next chunk for seamless streaming
       if (this.audioQueue.length > 0) {
         // Use setTimeout to prevent stack overflow with rapid chunks
@@ -665,19 +676,27 @@ export class AudioService {
   public interruptPlayback(): void {
     console.log('🛑 Interrupting TTS playback due to user speech');
     
-    if (!this.currentSource) {
-      return;
-    }
+    // Set interrupt flag to prevent onended callbacks from continuing playback
+    this.isInterrupted = true;
     
-    // Store previous state for the event
-    const previousState = this.audioState;
-    
-    try {
-      // Stop current audio immediately
-      this.currentSource.stop();
-      this.currentSource = null;
-    } catch (error) {
-      console.error('Error stopping playback during interrupt:', error);
+    if (this.currentSource) {
+      // Store previous state for the event
+      const previousState = this.audioState;
+      
+      try {
+        // Stop current audio immediately
+        this.currentSource.stop();
+        this.currentSource = null;
+      } catch (error) {
+        console.error('Error stopping playback during interrupt:', error);
+      }
+      
+      // Dispatch interrupt event
+      this.dispatchEvent(AudioEvent.PLAYBACK_STOP, {
+        interrupted: true,
+        reason: 'user_interrupt',
+        previousState: previousState
+      });
     }
     
     // Clear the entire queue to prevent continued playback
@@ -687,13 +706,6 @@ export class AudioService {
     this.audioState = AudioState.INTERRUPTED;
     this.isPlaying = false;
     this.isSpeaking = false;
-    
-    // Dispatch interrupt event
-    this.dispatchEvent(AudioEvent.PLAYBACK_STOP, {
-      interrupted: true,
-      reason: 'user_interrupt',
-      previousState: previousState
-    });
     
     console.log('TTS playback interrupted successfully');
   }
