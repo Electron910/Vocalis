@@ -77,7 +77,7 @@ export class AudioService {
   
   // Voice detection parameters
   private isVoiceDetected: boolean = false;
-  private voiceThreshold: number = 0.02; // Voice detection threshold (increased to reduce false positives)
+  private voiceThreshold: number = 0.03; // Voice detection threshold (increased for better interrupt detection)
   private silenceTimeout: number = 1000; // ms to keep recording after voice drops below threshold
   private lastVoiceTime: number = 0;
   private minRecordingLength: number = 1000; // Minimum ms of audio to send
@@ -296,21 +296,19 @@ export class AudioService {
     
     // Check if energy is above threshold (voice detected)
     if (energy > this.voiceThreshold) {
-      // Check if in a protected state OR if TTS is currently playing - ignore voice detection
-      if (this.isProcessing || this.isVisionProcessing || this.isGreeting || this.isSpeaking || this.isPlaying) {
+      // Check if in a protected state (but NOT during TTS - we need interrupts)
+      if (this.isProcessing || this.isVisionProcessing || this.isGreeting) {
         let state = "processing";
         if (this.isVisionProcessing) state = "vision_processing";
         if (this.isGreeting) state = "greeting";
-        if (this.isSpeaking || this.isPlaying) state = "tts_playing";
         
-        console.log(`Voice detected during ${state} (energy: ${energy.toFixed(4)}), ignoring to prevent false interrupt`);
-        // Skip further processing - don't even update isVoiceDetected
+        console.log(`Voice detected during ${state} (energy: ${energy.toFixed(4)}), ignoring`);
         
         // Still dispatch event for visualization, but mark isVoice as false
         this.dispatchEvent(AudioEvent.RECORDING_DATA, { 
           buffer: bufferCopy,
           energy: energy,
-          isVoice: false // Force false during processing, greeting, or TTS playback
+          isVoice: false // Force false during processing or greeting
         });
         
         return;
@@ -320,24 +318,22 @@ export class AudioService {
         console.log('Voice detected, energy:', energy);
         this.isVoiceDetected = true;
         
-      // This code should never execute now due to the improved check above,
-      // but keeping as a safety fallback for edge cases
-      if ((this.isSpeaking || this.audioState === AudioState.SPEAKING) && !this.isGreeting) {
-        console.log('FALLBACK: User started speaking while assistant was speaking - interrupting playback',
-                   `isSpeaking=${this.isSpeaking}, audioState=${this.audioState}, isGreeting=${this.isGreeting}`);
-        // Stop playback with proper interrupt handling
-        this.interruptPlayback();
-        // Send interrupt signal to server
-        websocketService.interrupt();
-      } else if (this.isGreeting) {
-        console.log('Voice detected during greeting - suppressing interrupt');
-      }
+        // Check if we're currently playing TTS audio - if so, interrupt it immediately
+        if ((this.isSpeaking || this.audioState === AudioState.SPEAKING) && !this.isGreeting) {
+          console.log('🛑 User started speaking while assistant was speaking - interrupting TTS playback',
+                     `isSpeaking=${this.isSpeaking}, audioState=${this.audioState}, energy=${energy.toFixed(4)}`);
+          // Stop playback with proper interrupt handling
+          this.interruptPlayback();
+          // Send interrupt signal to server
+          websocketService.interrupt();
+          // Continue processing the user's voice input
+        }
       }
       this.lastVoiceTime = Date.now();
     }
     
-    // If in a protected state OR TTS is playing, never accumulate audio buffer
-    if (this.isProcessing || this.isVisionProcessing || this.isGreeting || this.isSpeaking || this.isPlaying) {
+    // If in a protected state (but NOT during TTS - we need to capture user interrupts)
+    if (this.isProcessing || this.isVisionProcessing || this.isGreeting) {
       // Dispatch event for visualization only
       this.dispatchEvent(AudioEvent.RECORDING_DATA, { 
         buffer: bufferCopy,
@@ -348,7 +344,7 @@ export class AudioService {
     }
     
     // Add to buffer if voice is detected or we're in the silence timeout period
-    if (this.isVoiceDetected) {
+    if (this.isVoiceDetected || (Date.now() - this.lastVoiceTime) < this.silenceTimeout) {
       this.audioBuffer.push(bufferCopy);
       
       // Check if we've exceeded silence timeout
