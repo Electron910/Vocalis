@@ -210,16 +210,18 @@ class TTSClient:
     
     async def stream_text_to_speech_async(self, text: str):
         """
-        Asynchronously stream audio chunks from the TTS API.
+        Asynchronously stream individual audio chunks from the TTS API.
+        Each chunk is a complete playable audio segment.
         
         Args:
             text: Text to convert to speech
             
         Yields:
-            Audio chunks as they arrive from the streaming endpoint
+            Individual audio chunks as they are generated
         """
         self.is_processing = True
         start_time = time.time()
+        chunk_count = 0
         
         try:
             # Prepare request payload
@@ -231,7 +233,7 @@ class TTSClient:
                 "speed": self.speed
             }
             
-            logger.info(f"Sending async streaming TTS request with {len(text)} characters of text")
+            logger.info(f"Starting real-time TTS streaming for {len(text)} characters")
             
             # Use asyncio-compatible HTTP client for true async streaming
             import aiohttp
@@ -244,20 +246,100 @@ class TTSClient:
                 ) as response:
                     response.raise_for_status()
                     
-                    # Stream chunks as they arrive
-                    async for chunk in response.content.iter_chunked(self.chunk_size):
-                        if chunk:
-                            yield chunk
+                    wav_header_received = False
+                    accumulated_data = bytearray()
+                    
+                    # Stream raw chunks and reconstruct individual audio segments
+                    async for raw_chunk in response.content.iter_chunked(self.chunk_size):
+                        if not raw_chunk:
+                            continue
+                            
+                        accumulated_data.extend(raw_chunk)
+                        
+                        # Skip WAV header on first chunk
+                        if not wav_header_received and len(accumulated_data) >= 44:
+                            # Remove WAV header (first 44 bytes)
+                            accumulated_data = accumulated_data[44:]
+                            wav_header_received = True
+                            logger.info("WAV header processed, starting audio chunk streaming")
+                        
+                        # Process audio data in meaningful chunks (e.g., 0.1 seconds of audio)
+                        # At 24kHz, 16-bit mono: 0.1s = 2400 samples = 4800 bytes
+                        chunk_size_bytes = 4800  # ~0.1 seconds of audio
+                        
+                        while len(accumulated_data) >= chunk_size_bytes:
+                            # Extract one chunk
+                            audio_chunk_data = accumulated_data[:chunk_size_bytes]
+                            accumulated_data = accumulated_data[chunk_size_bytes:]
+                            
+                            # Create a complete WAV file for this chunk
+                            wav_chunk = self._create_wav_chunk(audio_chunk_data)
+                            chunk_count += 1
+                            
+                            logger.info(f"Yielding audio chunk {chunk_count} ({len(wav_chunk)} bytes)")
+                            yield wav_chunk
+                    
+                    # Process any remaining data
+                    if len(accumulated_data) > 0:
+                        wav_chunk = self._create_wav_chunk(accumulated_data)
+                        chunk_count += 1
+                        logger.info(f"Yielding final audio chunk {chunk_count} ({len(wav_chunk)} bytes)")
+                        yield wav_chunk
             
             # Calculate processing time
             self.last_processing_time = time.time() - start_time
-            logger.info(f"Completed async TTS streaming after {self.last_processing_time:.2f}s")
+            logger.info(f"Completed real-time TTS streaming: {chunk_count} chunks in {self.last_processing_time:.2f}s")
             
         except Exception as e:
-            logger.error(f"Async TTS streaming error: {e}")
+            logger.error(f"Real-time TTS streaming error: {e}")
             raise
         finally:
             self.is_processing = False
+    
+    def _create_wav_chunk(self, pcm_data: bytes) -> bytes:
+        """
+        Create a complete WAV file from PCM data chunk.
+        
+        Args:
+            pcm_data: Raw PCM audio data
+            
+        Returns:
+            Complete WAV file bytes
+        """
+        import struct
+        
+        # WAV header parameters
+        sample_rate = 24000  # Orpheus TTS sample rate
+        num_channels = 1     # Mono
+        bits_per_sample = 16
+        byte_rate = sample_rate * num_channels * bits_per_sample // 8
+        block_align = num_channels * bits_per_sample // 8
+        data_size = len(pcm_data)
+        
+        # Create WAV header
+        header = bytearray(44)
+        
+        # RIFF header
+        header[0:4] = b'RIFF'
+        struct.pack_into('<I', header, 4, 36 + data_size)  # File size
+        header[8:12] = b'WAVE'
+        
+        # fmt subchunk
+        header[12:16] = b'fmt '
+        struct.pack_into('<I', header, 16, 16)  # Subchunk1Size
+        struct.pack_into('<H', header, 20, 1)   # AudioFormat (PCM)
+        struct.pack_into('<H', header, 22, num_channels)  # NumChannels
+        struct.pack_into('<I', header, 24, sample_rate)   # SampleRate
+        struct.pack_into('<I', header, 28, byte_rate)     # ByteRate
+        struct.pack_into('<H', header, 32, block_align)   # BlockAlign
+        struct.pack_into('<H', header, 34, bits_per_sample)  # BitsPerSample
+        
+        # data subchunk
+        header[36:40] = b'data'
+        struct.pack_into('<I', header, 40, data_size)  # Subchunk2Size
+        
+        # Combine header and data
+        return bytes(header) + pcm_data
     
     def get_config(self) -> Dict[str, Any]:
         """
