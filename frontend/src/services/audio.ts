@@ -77,7 +77,7 @@ export class AudioService {
   
   // Voice detection parameters
   private isVoiceDetected: boolean = false;
-  private voiceThreshold: number = 0.01; // Adjust based on testing
+  private voiceThreshold: number = 0.02; // Voice detection threshold (increased to reduce false positives)
   private silenceTimeout: number = 1000; // ms to keep recording after voice drops below threshold
   private lastVoiceTime: number = 0;
   private minRecordingLength: number = 1000; // Minimum ms of audio to send
@@ -296,20 +296,21 @@ export class AudioService {
     
     // Check if energy is above threshold (voice detected)
     if (energy > this.voiceThreshold) {
-      // Check if in a protected state - if so, ignore voice detection entirely
-      if (this.isProcessing || this.isVisionProcessing || this.isGreeting) {
+      // Check if in a protected state OR if TTS is currently playing - ignore voice detection
+      if (this.isProcessing || this.isVisionProcessing || this.isGreeting || this.isSpeaking || this.isPlaying) {
         let state = "processing";
         if (this.isVisionProcessing) state = "vision_processing";
         if (this.isGreeting) state = "greeting";
+        if (this.isSpeaking || this.isPlaying) state = "tts_playing";
         
-        console.log(`Voice detected during ${state} (energy: ${energy.toFixed(4)}), ignoring`);
+        console.log(`Voice detected during ${state} (energy: ${energy.toFixed(4)}), ignoring to prevent false interrupt`);
         // Skip further processing - don't even update isVoiceDetected
         
         // Still dispatch event for visualization, but mark isVoice as false
         this.dispatchEvent(AudioEvent.RECORDING_DATA, { 
           buffer: bufferCopy,
           energy: energy,
-          isVoice: false // Force false during processing or greeting
+          isVoice: false // Force false during processing, greeting, or TTS playback
         });
         
         return;
@@ -319,21 +320,15 @@ export class AudioService {
         console.log('Voice detected, energy:', energy);
         this.isVoiceDetected = true;
         
-      // Check if we're currently playing TTS audio
-      // If so, interrupt it immediately - BUT NOT during greeting
-      // Also explicitly check audioState to catch any edge cases
+      // This code should never execute now due to the improved check above,
+      // but keeping as a safety fallback for edge cases
       if ((this.isSpeaking || this.audioState === AudioState.SPEAKING) && !this.isGreeting) {
-        console.log('User started speaking while assistant was speaking - interrupting playback',
+        console.log('FALLBACK: User started speaking while assistant was speaking - interrupting playback',
                    `isSpeaking=${this.isSpeaking}, audioState=${this.audioState}, isGreeting=${this.isGreeting}`);
-        // Stop playback locally
-        this.stopPlayback();
+        // Stop playback with proper interrupt handling
+        this.interruptPlayback();
         // Send interrupt signal to server
         websocketService.interrupt();
-        // Dispatch an event so UI can update
-        this.dispatchEvent(AudioEvent.PLAYBACK_STOP, {
-          interrupted: true,
-          reason: 'user_interrupt'
-        });
       } else if (this.isGreeting) {
         console.log('Voice detected during greeting - suppressing interrupt');
       }
@@ -341,8 +336,8 @@ export class AudioService {
       this.lastVoiceTime = Date.now();
     }
     
-    // If in a protected state, never accumulate audio buffer
-    if (this.isProcessing || this.isVisionProcessing || this.isGreeting) {
+    // If in a protected state OR TTS is playing, never accumulate audio buffer
+    if (this.isProcessing || this.isVisionProcessing || this.isGreeting || this.isSpeaking || this.isPlaying) {
       // Dispatch event for visualization only
       this.dispatchEvent(AudioEvent.RECORDING_DATA, { 
         buffer: bufferCopy,
@@ -643,15 +638,12 @@ export class AudioService {
   }
 
   /**
-   * Stop audio playback
+   * Stop audio playback (normal stop)
    */
   public stopPlayback(): void {
     if (!this.currentSource) {
       return;
     }
-    
-    // Store previous state for the event
-    const previousState = this.audioState;
     
     try {
       this.currentSource.stop();
@@ -663,23 +655,51 @@ export class AudioService {
     // Clear the queue
     this.audioQueue = [];
     
-    // Set state to INTERRUPTED if we were SPEAKING
-    if (previousState === AudioState.SPEAKING) {
-      this.audioState = AudioState.INTERRUPTED;
-    } else {
-      this.audioState = AudioState.INACTIVE;
-    }
-    
+    // Normal stop - set to inactive
+    this.audioState = AudioState.INACTIVE;
     this.isPlaying = false;
     this.isSpeaking = false;
     
-    // Dispatch event with previous state info
-    this.dispatchEvent(AudioEvent.PLAYBACK_STOP, { 
-      interrupted: previousState === AudioState.SPEAKING,
+    console.log('Audio playback stopped normally');
+  }
+  
+  /**
+   * Interrupt audio playback (when user starts speaking)
+   */
+  public interruptPlayback(): void {
+    console.log('🛑 Interrupting TTS playback due to user speech');
+    
+    if (!this.currentSource) {
+      return;
+    }
+    
+    // Store previous state for the event
+    const previousState = this.audioState;
+    
+    try {
+      // Stop current audio immediately
+      this.currentSource.stop();
+      this.currentSource = null;
+    } catch (error) {
+      console.error('Error stopping playback during interrupt:', error);
+    }
+    
+    // Clear the entire queue to prevent continued playback
+    this.audioQueue = [];
+    
+    // Set state to INTERRUPTED
+    this.audioState = AudioState.INTERRUPTED;
+    this.isPlaying = false;
+    this.isSpeaking = false;
+    
+    // Dispatch interrupt event
+    this.dispatchEvent(AudioEvent.PLAYBACK_STOP, {
+      interrupted: true,
+      reason: 'user_interrupt',
       previousState: previousState
     });
     
-    console.log('Playback stopped');
+    console.log('TTS playback interrupted successfully');
   }
 
   /**
