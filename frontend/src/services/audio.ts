@@ -482,13 +482,10 @@ export class AudioService {
   }
 
   /**
-   * Play audio from base64-encoded data
+   * Play audio from base64-encoded data with immediate streaming playback
    * 
-   * The backend now sends complete audio files instead of chunks,
-   * so we just need to decode and play the entire file at once.
-   * 
-   * This method is specifically for playing TTS content and will
-   * set the state to SPEAKING rather than just PLAYING.
+   * This method now handles individual audio chunks for real-time streaming.
+   * Each chunk is played immediately as it arrives.
    */
   public async playAudioChunk(base64AudioChunk: string, format: string = 'wav'): Promise<void> {
     try {
@@ -501,37 +498,40 @@ export class AudioService {
       // Convert base64 to ArrayBuffer
       const audioData = WebSocketService.base64ToArrayBuffer(base64AudioChunk);
       
-      console.log(`Received complete audio file (${audioData.byteLength} bytes)`);
+      console.log(`Received audio chunk (${audioData.byteLength} bytes) - processing immediately`);
       
-      // Decode the audio data
+      // Decode the audio data immediately
       try {
         const audioBuffer = await this.audioContext.decodeAudioData(audioData);
         
-        // Add to queue (instead of immediate playback)
+        console.log(`Decoded audio chunk: duration=${audioBuffer.duration.toFixed(3)}s`);
+        
+        // Add to queue for sequential playback
         this.audioQueue.push(audioBuffer);
         
-        // Start playback if not already playing
+        // Start playback immediately if not already playing
         if (!this.isPlaying) {
+          console.log('Starting immediate playback of first chunk');
           this.playNextChunk();
         } else {
-          console.log(`Added audio buffer to queue: duration=${audioBuffer.duration.toFixed(2)}s`);
+          console.log(`Queued chunk ${this.audioQueue.length}: ${audioBuffer.duration.toFixed(3)}s`);
         }
         
       } catch (error) {
-        console.error('Error decoding audio data:', error);
+        console.error('Error decoding audio chunk:', error);
         this.dispatchEvent(AudioEvent.AUDIO_ERROR, { error });
       }
     } catch (error) {
-      console.error('Error queueing audio chunk:', error);
+      console.error('Error processing audio chunk:', error);
       this.dispatchEvent(AudioEvent.AUDIO_ERROR, { error });
     }
   }
   
   /**
-   * Play next audio chunk from the queue
+   * Play next audio chunk from the queue with optimized real-time streaming
    */
   private playNextChunk(): void {
-    console.log(`>> playNextChunk called. Queue length: ${this.audioQueue.length}, isPlaying: ${this.isPlaying}, isSpeaking: ${this.isSpeaking}`);
+    console.log(`>> playNextChunk called. Queue length: ${this.audioQueue.length}, isPlaying: ${this.isPlaying}`);
     
     if (this.audioQueue.length === 0) {
       this.isPlaying = false;
@@ -562,10 +562,11 @@ export class AudioService {
     
     // Handle when this chunk ends
     source.onended = () => {
-      console.log(`Buffer playback ended. Queue length: ${this.audioQueue.length}`);
-      // If there are more chunks, play them
+      console.log(`Chunk playback ended. Queue: ${this.audioQueue.length} remaining`);
+      // Immediately play next chunk for seamless streaming
       if (this.audioQueue.length > 0) {
-        this.playNextChunk();
+        // Use setTimeout to prevent stack overflow with rapid chunks
+        setTimeout(() => this.playNextChunk(), 0);
       } else {
         // No more chunks, end playback
         this.isPlaying = false;
@@ -575,21 +576,21 @@ export class AudioService {
         this.dispatchEvent(AudioEvent.PLAYBACK_END, {
           previousState: AudioState.SPEAKING
         });
-        console.log('Last audio chunk complete, playback ended');
+        console.log('Streaming playback complete');
       }
     };
     
     // Keep track of current source for stopping
     this.currentSource = source;
     
-    // Start playback with a small delay
-    source.start(this.audioContext.currentTime + 0.05);
+    // Start playback immediately for real-time streaming
+    source.start(this.audioContext.currentTime);
     
-    console.log(`Playing audio buffer: duration=${buffer.duration.toFixed(2)}s, queue remaining: ${this.audioQueue.length}`);
+    console.log(`🎵 Playing chunk: ${buffer.duration.toFixed(3)}s, queue: ${this.audioQueue.length}`);
     
     // Dispatch playback start event only if we weren't already playing
     if (!wasPlaying) {
-      console.log('First chunk in sequence - dispatching PLAYBACK_START event');
+      console.log('🎬 Starting real-time audio streaming');
       this.dispatchEvent(AudioEvent.PLAYBACK_START, {});
     }
   }
