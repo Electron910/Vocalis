@@ -1,7 +1,7 @@
 Commands : 
 Terminal 1 : 
 cd workspace
-git clone https://github.com/devasphn/Vocalis
+git clone https://github.com/Electron910/Vocalis
 cd Vocalis
 cd backend
 python3 -m venv env
@@ -47,7 +47,7 @@ for shutting down llama : pkill -f llama
 
 Terminal 2: 
 cd workspace
-git clone https://github.com/devasphn/Orpheus-FastAPI/
+git clone https://github.com/Electron910/Orpheus-FastAPI/
 cd Orpheus-FastAPI/
 python3 -m venv tts_env
 source tts_env/bin/activate
