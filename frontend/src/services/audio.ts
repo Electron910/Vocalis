@@ -112,6 +112,43 @@ export class AudioService {
     this.isVisionProcessing = isVisionProcessing;
     console.log(`Vision processing state set to: ${isVisionProcessing}`);
   }
+  private applySmoothingFilter(audioData: Float32Array): Float32Array {
+    const smoothed = new Float32Array(audioData.length);
+    const alpha = 0.1; // Smoothing factor
+    
+    smoothed[0] = audioData[0];
+    for (let i = 1; i < audioData.length; i++) {
+        smoothed[i] = alpha * audioData[i] + (1 - alpha) * smoothed[i - 1];
+    }
+    
+    return smoothed;
+}
+
+// Update _create_wav_chunk method
+private _create_wav_chunk(pcm_data: bytes): bytes {
+    // Convert to Float32Array first
+    const float32Data = new Float32Array(pcm_data.length / 2);
+    const dataView = new DataView(pcm_data);
+    
+    for (let i = 0; i < float32Data.length; i++) {
+        float32Data[i] = dataView.getInt16(i * 2, true) / 32768;
+    }
+    
+    // Apply smoothing
+    const smoothed = this.applySmoothingFilter(float32Data);
+    
+    // Convert back and create WAV
+    const smoothedBytes = new ArrayBuffer(smoothed.length * 2);
+    const smoothedView = new DataView(smoothedBytes);
+    
+    for (let i = 0; i < smoothed.length; i++) {
+        const sample = Math.max(-1, Math.min(1, smoothed[i]));
+        smoothedView.setInt16(i * 2, sample * 32767, true);
+    }
+    
+    return this._createWavFromPCM(smoothedBytes);
+}
+
   
 
   /**
