@@ -414,8 +414,8 @@ class WebSocketManager:
                 pcm16 = (arr * 32767.0).astype(np.int16)
             
                 # Use global sample rate setting
-                from backend.config import settings
-                sample_rate = settings.ORPHEUS_SAMPLE_RATE
+                from backend.config import ORPHEUS_SAMPLE_RATE
+                sample_rate = ORPHEUS_SAMPLE_RATE
             
                 # Wrap in WAV
                 wav_buf = io.BytesIO()
