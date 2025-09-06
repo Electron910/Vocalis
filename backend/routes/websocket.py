@@ -14,6 +14,8 @@ from typing import Dict, Any, List, Optional, AsyncGenerator
 from fastapi import WebSocket, WebSocketDisconnect, BackgroundTasks
 from pydantic import BaseModel
 from datetime import datetime
+import soundfile as sf
+import io
 
 from ..services.transcription import WhisperTranscriber
 from ..services.llm import LLMClient
@@ -369,11 +371,15 @@ class WebSocketManager:
                     return
                 
                 # Encode and send each audio chunk immediately
-                encoded_audio = base64.b64encode(audio_chunk).decode("utf-8")
+                wav_buffer = io.BytesIO()
+                sf.write(wav_buffer, audio_chunk, self.tts_client.sample_rate, format="WAV", subtype="PCM_16")
+                wav_bytes = wav_buffer.getvalue()
+            
+                encoded_audio = base64.b64encode(wav_bytes).decode("utf-8")
                 await websocket.send_json({
                     "type": MessageType.TTS_CHUNK,
                     "audio_chunk": encoded_audio,
-                    "format": self.tts_client.output_format,
+                    "format": "wav",
                     "timestamp": datetime.now().isoformat()
                 })
             
