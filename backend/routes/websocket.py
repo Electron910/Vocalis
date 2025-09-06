@@ -379,7 +379,7 @@ class WebSocketManager:
                 await websocket.send_json({
                     "type": MessageType.TTS_CHUNK,
                     "audio_chunk": encoded_audio,
-                    "format": self.tts_client.output_format,
+                    "format": "pcm16",
                     "timestamp": datetime.now().isoformat()
                 })
             
