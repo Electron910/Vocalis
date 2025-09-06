@@ -221,7 +221,11 @@ class WebSocketManager:
             # We're receiving WAV data, so we need to parse the WAV header
             # WAV format: 44-byte header followed by PCM data
             # Let whisper handle the WAV data directly - it can parse WAV headers
-            audio_array = np.frombuffer(audio_data, dtype=np.uint8)
+            audio_array = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
+
+            if self.tts_client.is_processing:
+                logger.info("Ignoring microphone input during TTS playback")
+                return
             
             # Interrupt any ongoing TTS playback
             if self.tts_client.is_processing:
