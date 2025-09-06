@@ -319,6 +319,30 @@ private _create_wav_chunk(pcm_data: bytes): bytes {
   }
 
   /**
+ * Apply a simple low-pass filter to a Float32Array buffer.
+ * @param buffer The audio sample buffer.
+ * @param sampleRate The audio sample rate, e.g. 44100.
+ * @param cutoff The cutoff frequency in Hz (default: 3000 Hz).
+ * @returns A new Float32Array with the low-pass filter applied.
+ */
+private applyLowPassFilter(
+  buffer: Float32Array, 
+  sampleRate: number, 
+  cutoff: number = 3000
+): Float32Array {
+  const RC = 1.0 / (cutoff * 2 * Math.PI);
+  const dt = 1.0 / sampleRate;
+  const alpha = dt / (RC + dt);
+  const output = new Float32Array(buffer.length);
+  output[0] = buffer[0];
+  for (let i = 1; i < buffer.length; i++) {
+    output[i] = output[i - 1] + alpha * (buffer[i] - output[i - 1]);
+  }
+  return output;
+}
+
+
+  /**
    * Handle audio processing
    */
   private handleAudioProcess(event: AudioProcessingEvent): void {
@@ -328,9 +352,11 @@ private _create_wav_chunk(pcm_data: bytes): bytes {
     // Create a copy of the buffer
     const bufferCopy = new Float32Array(inputData.length);
     bufferCopy.set(inputData);
+
+    const filteredBuffer = this.applyLowPassFilter(bufferCopy, this.config.sampleRate);
     
     // Calculate RMS energy
-    const energy = this.calculateRMSEnergy(bufferCopy);
+    const energy = this.calculateRMSEnergy(filteredBuffer);
     
     // Check if energy is above threshold (voice detected)
     if (energy > this.voiceThreshold) {
