@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from datetime import datetime
 import soundfile as sf
 import io
+import wave
 
 from ..services.transcription import WhisperTranscriber
 from ..services.llm import LLMClient
@@ -371,11 +372,20 @@ class WebSocketManager:
                     return
                 
                 # Encode and send each audio chunk immediately
-                wav_buffer = io.BytesIO()
-                sf.write(wav_buffer, audio_chunk, self.tts_client.sample_rate, format="WAV", subtype="PCM_16")
-                wav_bytes = wav_buffer.getvalue()
+                # wav_buffer = io.BytesIO()
+                # sf.write(wav_buffer, audio_chunk, self.tts_client.sample_rate, format="WAV", subtype="PCM_16")
+                # wav_bytes = wav_buffer.getvalue()
+                if audio_chunk[:4] == b"RIFF":
+                    # First chunk includes WAV header — extract PCM data
+                    with wave.open(io.BytesIO(audio_chunk), "rb") as wav_reader:
+                        pcm_data = wav_reader.readframes(wav_reader.getnframes())
+                else:
+                    # Subsequent chunks are already PCM
+                    pcm_data = audio_chunk
             
-                encoded_audio = base64.b64encode(wav_bytes).decode("utf-8")
+                encoded_audio = base64.b64encode(pcm_data).decode("utf-8")
+            
+                # encoded_audio = base64.b64encode(wav_bytes).decode("utf-8")
                 await websocket.send_json({
                     "type": MessageType.TTS_CHUNK,
                     "audio_chunk": encoded_audio,
