@@ -553,14 +553,6 @@ private applyLowPassFilter(
       // Convert base64 to ArrayBuffer
       const audioData = WebSocketService.base64ToArrayBuffer(base64AudioChunk);
 
-      if (format === 'wav') {
-      // Normal decode, WAV header tells browser sampleRate
-        const audioBuffer = await this.audioContext.decodeAudioData(audioData.slice(0));
-        this.audioQueue.push(audioBuffer);
-        if (!this.isPlaying) this.playNextChunk();
-        return; // <-- Add this line
-      }
-
       
       console.log(`Received audio chunk (${audioData.byteLength} bytes) - processing immediately`);
       
