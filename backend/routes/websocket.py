@@ -376,25 +376,12 @@ class WebSocketManager:
                 # sf.write(wav_buffer, audio_chunk, self.tts_client.sample_rate, format="WAV", subtype="PCM_16")
                 # wav_bytes = wav_buffer.getvalue()
 
-                if isinstance(audio_chunk, np.ndarray):
-                    arr = audio_chunk.astype(np.float32)
-                else:
-                    arr = np.frombuffer(audio_chunk, dtype=np.float32)
-                
-                arr = np.clip(arr, -1.0, 1.0)
-                
-                # Convert to PCM16 and wrap in WAV
-                pcm16 = (arr * 32767).astype(np.int16)
-                wav_buf = io.BytesIO()
-                sf.write(wav_buf, pcm16, self.tts_client.sample_rate, format="WAV", subtype="PCM_16")
-                wav_bytes = wav_buf.getvalue()
                 # Encode and send each audio chunk immediately
-                encoded_audio = base64.b64encode(wav_bytes).decode("utf-8")
+                encoded_audio = base64.b64encode(audio_chunk).decode("utf-8")
                 await websocket.send_json({
                     "type": MessageType.TTS_CHUNK,
                     "audio_chunk": encoded_audio,
-                    "format": "wav",
-                    "sample_rate": self.tts_client.sample_rate,
+                    "format": self.tts_client.output_format,
                     "timestamp": datetime.now().isoformat()
                 })
 
