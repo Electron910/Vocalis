@@ -415,11 +415,11 @@ class WebSocketManager:
             
                 # Use global sample rate setting
                 from backend.config import ORPHEUS_SAMPLE_RATE
-                sample_rate = ORPHEUS_SAMPLE_RATE
+                # sample_rate = ORPHEUS_SAMPLE_RATE
             
                 # Wrap in WAV
                 wav_buf = io.BytesIO()
-                sf.write(wav_buf, pcm16, sample_rate, format="WAV", subtype="PCM_16")
+                sf.write(wav_buf, pcm16, format="WAV", subtype="PCM_16")
                 wav_bytes = wav_buf.getvalue()
             
                 encoded_audio = base64.b64encode(wav_bytes).decode("utf-8")
@@ -428,7 +428,6 @@ class WebSocketManager:
                     "type": MessageType.TTS_CHUNK,
                     "audio_chunk": encoded_audio,
                     "format": "wav",
-                    "sample_rate": sample_rate,
                     "timestamp": datetime.now().isoformat()
                 })
 
