@@ -365,69 +365,36 @@ class WebSocketManager:
             await self._send_status(websocket, "generating_speech", {})
             
             # Stream audio chunks in real-time
-            # async for audio_chunk in self.tts_client.stream_text_to_speech_async(text):
-            #     # Check if playback should be interrupted
-            #     if self.interrupt_playback.is_set():
-            #         logger.info("TTS streaming interrupted")
-            #         return
-                
-            #     # Encode and send each audio chunk immediately
-            #     # wav_buffer = io.BytesIO()
-            #     # sf.write(wav_buffer, audio_chunk, self.tts_client.sample_rate, format="WAV", subtype="PCM_16")
-            #     # wav_bytes = wav_buffer.getvalue()
-
-            #     if isinstance(audio_chunk, np.ndarray):
-            #         arr = audio_chunk.astype(np.float32)
-            #     else:
-            #         arr = np.frombuffer(audio_chunk, dtype=np.float32)
-                
-            #     arr = np.clip(arr, -1.0, 1.0)
-                
-            #     # Convert to PCM16 and wrap in WAV
-            #     pcm16 = (arr * 32767).astype(np.int16)
-            #     wav_buf = io.BytesIO()
-            #     sf.write(wav_buf, pcm16, self.tts_client.sample_rate, format="WAV", subtype="PCM_16")
-            #     wav_bytes = wav_buf.getvalue()
-            #     # Encode and send each audio chunk immediately
-            #     encoded_audio = base64.b64encode(wav_bytes).decode("utf-8")
-            #     await websocket.send_json({
-            #         "type": MessageType.TTS_CHUNK,
-            #         "audio_chunk": encoded_audio,
-            #         "format": "wav",
-            #         "sample_rate": self.tts_client.sample_rate,
-            #         "timestamp": datetime.now().isoformat()
-            #     })
             async for audio_chunk in self.tts_client.stream_text_to_speech_async(text):
+                # Check if playback should be interrupted
                 if self.interrupt_playback.is_set():
+                    logger.info("TTS streaming interrupted")
                     return
-            
+                
+                # Encode and send each audio chunk immediately
+                # wav_buffer = io.BytesIO()
+                # sf.write(wav_buffer, audio_chunk, self.tts_client.sample_rate, format="WAV", subtype="PCM_16")
+                # wav_bytes = wav_buffer.getvalue()
+
                 if isinstance(audio_chunk, np.ndarray):
                     arr = audio_chunk.astype(np.float32)
                 else:
                     arr = np.frombuffer(audio_chunk, dtype=np.float32)
-            
-                # Clean + clip
-                arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+                
                 arr = np.clip(arr, -1.0, 1.0)
-            
-                # Convert to PCM16
-                pcm16 = (arr * 32767.0).astype(np.int16)
-            
-                # Use global sample rate setting
-                from backend.config import ORPHEUS_SAMPLE_RATE
-                # sample_rate = ORPHEUS_SAMPLE_RATE
-            
-                # Wrap in WAV
+                
+                # Convert to PCM16 and wrap in WAV
+                pcm16 = (arr * 32767).astype(np.int16)
                 wav_buf = io.BytesIO()
-                sf.write(wav_buf, pcm16, format="WAV", subtype="PCM_16")
+                sf.write(wav_buf, pcm16, self.tts_client.sample_rate, format="WAV", subtype="PCM_16")
                 wav_bytes = wav_buf.getvalue()
-            
+                # Encode and send each audio chunk immediately
                 encoded_audio = base64.b64encode(wav_bytes).decode("utf-8")
-            
                 await websocket.send_json({
                     "type": MessageType.TTS_CHUNK,
                     "audio_chunk": encoded_audio,
                     "format": "wav",
+                    "sample_rate": self.tts_client.sample_rate,
                     "timestamp": datetime.now().isoformat()
                 })
 
